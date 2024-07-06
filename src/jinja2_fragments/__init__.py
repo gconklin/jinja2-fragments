@@ -1,7 +1,6 @@
 import typing
 
 from jinja2 import Environment
-from jinja2.runtime import Macro
 
 
 class BlockNotFoundError(Exception):
@@ -21,6 +20,8 @@ async def render_block_async(
     template_name: str,
     block_name: str,
     *args: typing.Any,
+    shared: bool = False,
+    locals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
     **kwargs: typing.Any,
 ) -> str:
     """
@@ -37,13 +38,7 @@ async def render_block_async(
     except KeyError:
         raise BlockNotFoundError(block_name, template_name)
 
-    template_module = await template.make_module_async(vars=dict(*args, **kwargs))
-    macros = {
-        m: getattr(template_module, m)
-        for m in dir(template_module)
-        if isinstance(getattr(template_module, m), Macro)
-    }
-    ctx = template.new_context(vars=dict(*args, **kwargs), locals=macros)
+    ctx = template.new_context(vars=dict(*args, **kwargs), shared=shared, locals=locals)
     try:
         return environment.concat(  # type: ignore
             [n async for n in block_render_func(ctx)]  # type: ignore
@@ -57,6 +52,8 @@ def render_block(
     template_name: str,
     block_name: str,
     *args: typing.Any,
+    shared: bool = False,
+    locals: typing.Optional[typing.Mapping[str, typing.Any]] = None,
     **kwargs: typing.Any,
 ) -> str:
     """This returns the rendered template block as a string."""
@@ -74,7 +71,13 @@ def render_block(
         try:
             return loop.run_until_complete(
                 render_block_async(
-                    environment, template_name, block_name, *args, **kwargs
+                    environment,
+                    template_name,
+                    block_name,
+                    *args,
+                    shared=shared,
+                    locals=locals,
+                    **kwargs,
                 )
             )
         finally:
@@ -87,13 +90,7 @@ def render_block(
     except KeyError:
         raise BlockNotFoundError(block_name, template_name)
 
-    template_module = template.make_module(vars=dict(*args, **kwargs))
-    macros = {
-        m: getattr(template_module, m)
-        for m in dir(template_module)
-        if isinstance(getattr(template_module, m), Macro)
-    }
-    ctx = template.new_context(vars=dict(*args, **kwargs), locals=macros)
+    ctx = template.new_context(vars=dict(*args, **kwargs), shared=shared, locals=locals)
     try:
         return environment.concat(block_render_func(ctx))  # type: ignore
     except Exception:
